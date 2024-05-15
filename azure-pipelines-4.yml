@@ -1,0 +1,116 @@
+trigger: none
+
+resources:
+   webhooks:
+     - webhook: deltanew
+       connection: deltanew
+       filters:
+         - path: pull_request.merged
+           value: true
+         - path: pull_request.base.ref
+           value: "develop"
+
+   repositories:
+     - repository: b2b-gsp-slfdelta
+       type: githubenterprise
+       name: VFGroup-TaaS-Tenants/b2b-gsp-slfdelta
+       ref: develop
+       endpoint: delta
+
+variables:
+- name: devops_dir
+  value: "/home/vsts/work/1/b2b-gsp-deltadevops"
+- name: global_dir
+  value: "/home/vsts/work/1/s/b2b-gsp-slfdelta"
+- group: vargroup-sfdx  
+
+stages:
+ - stage: UnlockedPackage_Creation
+   jobs:
+      - job: Build 
+        timeoutInMinutes: 360
+        pool:
+         vmImage: ubuntu-latest
+        steps:
+
+        - checkout: self
+          path: b2b-gsp-deltadevops
+        - checkout: b2b-gsp-slfdelta
+          fetchDepth: 0
+        
+        - task: Bash@3
+          inputs:
+              targetType: 'inline'
+              script: |
+                cd $(global_dir)
+                git checkout master
+                git checkout develop
+                python $(devops_dir)/python-scripts/utils/vlocityCheckDiffs.py master
+
+PYTHON CODE:
+
+import os
+import subprocess
+import sys
+
+def main():    
+   target_Branch = sys.argv[1]
+   cmd=f'git diff --name-status {target_Branch} vlocity/'
+   cmd_output, _=call_subprocess(cmd)
+   print(cmd_output)
+   if cmd_output:
+        print("=====EXIT CODE 123=====")
+        print("Changes detected")
+        print(cmd_output)
+        exit(123)
+   else:
+       print("=====EXIT CODE 1=====")
+       print("No changes detected")
+       print(cmd_output)
+       exit(1)
+
+def call_subprocess(command, verbose=True):
+    ''' Calls subprocess, returns output and return code,
+        if verbose flag is active it will print the output '''
+    try:
+        stdout = subprocess.check_output(command, stderr=subprocess.STDOUT,
+                                         shell=True).decode('utf-8')
+        if verbose:
+            print_output(f'{stdout}')
+        return stdout, 0
+    except subprocess.CalledProcessError as exc:
+        output = exc.output.decode('utf-8')
+        returncode = exc.returncode
+        if verbose:
+            print(f'[ERROR]Subprocess returned non-zero exit '
+                  f'status {returncode}')
+            print_output(output)
+        return output, returncode
+
+def print_output(output, color='', tab_level=1):
+    ''' Prints output in the color passed '''
+    formated = '\t' * tab_level + output.replace('\n', '\n' + '\t' * tab_level)
+    print(f'{formated}')
+if __name__=='__main__':
+    main()
+
+PIPeline is failing if changes is detected or not. How to write the condition as per python output i tried it is not working
+what is the best solution to write condition as per python script exit code 123 or exist code 1
+
+Previous HEAD position was a35d7eb Create form.json
+Switched to a new branch 'master'
+branch 'master' set up to track 'origin/master'.
+Switched to a new branch 'develop'
+branch 'develop' set up to track 'origin/develop'.
+	
+
+=====EXIT CODE 1=====
+No changes detected
+
+##[debug]Exit code 1 received from tool '/usr/bin/bash'
+##[debug]STDIO streams have closed for tool '/usr/bin/bash'
+##[error]Bash exited with code '1'.
+##[debug]Processed: ##vso[task.issue type=error;]Bash exited with code '1'.
+##[debug]task result: Failed
+##[debug]Processed: ##vso[task.complete result=Failed;done=true;]
+Finishing: Bash
